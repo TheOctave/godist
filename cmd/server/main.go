@@ -1,8 +1,9 @@
 package main
 
 import (
-	"godist/internal/server"
 	"log"
+
+	"github.com/TheOctave/godist/internal/server"
 )
 
 func main() {
