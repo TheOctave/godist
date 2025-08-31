@@ -269,7 +269,7 @@ const file_api_v1_log_proto_rawDesc = "" +
 	"\aProduce\x12\x13.api.ProduceRequest\x1a\x14.api.ProduceResponse\"\x00\x126\n" +
 	"\aConsume\x12\x13.api.ConsumeRequest\x1a\x14.api.ConsumeResponse\"\x00\x12>\n" +
 	"\rConsumeStream\x12\x13.api.ConsumeRequest\x1a\x14.api.ConsumeResponse\"\x000\x01\x12@\n" +
-	"\rProduceStream\x12\x13.api.ProduceRequest\x1a\x14.api.ProduceResponse\"\x00(\x010\x01B\x1dZ\x1bgithub.com/TheOctave/godistb\x06proto3"
+	"\rProduceStream\x12\x13.api.ProduceRequest\x1a\x14.api.ProduceResponse\"\x00(\x010\x01B!Z\x1fgithub.com/TheOctave/godist;apib\x06proto3"
 
 var (
 	file_api_v1_log_proto_rawDescOnce sync.Once

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package api;
 
-option go_package = "github.com/TheOctave/godist";
+option go_package = "github.com/TheOctave/godist;api";
 
 message Record {
     bytes value = 1;
