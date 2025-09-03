@@ -22,7 +22,10 @@ type DistributedLog struct {
 	raft   *raft.Raft
 }
 
-func NewDistributedLog(dataDir string, config Config) (*DistributedLog, error) {
+func NewDistributedLog(dataDir string, config Config) (
+	*DistributedLog,
+	error,
+) {
 	l := &DistributedLog{
 		config: config,
 	}
@@ -63,7 +66,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 		filepath.Join(dataDir, "raft", "stable"),
 	)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	retain := 1
@@ -75,6 +78,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	if err != nil {
 		return err
 	}
+
 	maxPool := 5
 	timeout := 10 * time.Second
 	transport := raft.NewNetworkTransport(
@@ -92,6 +96,12 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	if l.config.Raft.ElectionTimeout != 0 {
 		config.ElectionTimeout = l.config.Raft.ElectionTimeout
 	}
+	if l.config.Raft.LeaderLeaseTimeout != 0 {
+		config.LeaderLeaseTimeout = l.config.Raft.LeaderLeaseTimeout
+	}
+	if l.config.Raft.CommitTimeout != 0 {
+		config.CommitTimeout = l.config.Raft.CommitTimeout
+	}
 
 	l.raft, err = raft.NewRaft(
 		config,
@@ -104,15 +114,7 @@ func (l *DistributedLog) setupRaft(dataDir string) error {
 	if err != nil {
 		return err
 	}
-	hasState, err := raft.HasExistingState(
-		logStore,
-		stableStore,
-		snapshotStore,
-	)
-	if err != nil {
-		return err
-	}
-	if l.config.Raft.Bootstrap && !hasState {
+	if l.config.Raft.Bootstrap {
 		config := raft.Configuration{
 			Servers: []raft.Server{{
 				ID:      config.LocalID,
@@ -135,7 +137,10 @@ func (l *DistributedLog) Append(record *api.Record) (uint64, error) {
 	return res.(*api.ProduceResponse).Offset, nil
 }
 
-func (l *DistributedLog) apply(reqType RequestType, req proto.Message) (interface{}, error) {
+func (l *DistributedLog) apply(reqType RequestType, req proto.Message) (
+	interface{},
+	error,
+) {
 	var buf bytes.Buffer
 	_, err := buf.Write([]byte{byte(reqType)})
 	if err != nil {
@@ -213,6 +218,14 @@ func (l *DistributedLog) WaitForLeader(timeout time.Duration) error {
 	}
 }
 
+func (l *DistributedLog) Close() error {
+	f := l.raft.Shutdown()
+	if err := f.Error(); err != nil {
+		return err
+	}
+	return l.log.Close()
+}
+
 var _ raft.FSM = (*fsm)(nil)
 
 type fsm struct {
@@ -225,31 +238,31 @@ const (
 	AppendRequestType RequestType = 0
 )
 
-func (f *fsm) Apply(record *raft.Log) interface{} {
+func (l *fsm) Apply(record *raft.Log) interface{} {
 	buf := record.Data
 	reqType := RequestType(buf[0])
 	switch reqType {
 	case AppendRequestType:
-		return f.applyAppend(buf[1:])
+		return l.applyAppend(buf[1:])
 	}
 	return nil
 }
 
-func (f *fsm) applyAppend(b []byte) interface{} {
+func (l *fsm) applyAppend(b []byte) interface{} {
 	var req api.ProduceRequest
 	err := proto.Unmarshal(b, &req)
 	if err != nil {
 		return err
 	}
-	offset, err := f.log.Append(req.Record)
+	offset, err := l.log.Append(req.Record)
 	if err != nil {
 		return err
 	}
 	return &api.ProduceResponse{Offset: offset}
 }
 
-func (f *fsm) Snapshot() (raft.FSMSnapshot, error) {
-	r := f.log.Reader()
+func (l *fsm) Snapshot() (raft.FSMSnapshot, error) {
+	r := l.log.Reader()
 	return &snapshot{reader: r}, nil
 }
 
@@ -269,7 +282,7 @@ func (s *snapshot) Persist(sink raft.SnapshotSink) error {
 
 func (s *snapshot) Release() {}
 
-func (f *fsm) Restore(r io.ReadCloser) error {
+func (l *fsm) Restore(r io.ReadCloser) error {
 	b := make([]byte, lenWidth)
 	var buf bytes.Buffer
 	for i := 0; ; i++ {
@@ -284,16 +297,16 @@ func (f *fsm) Restore(r io.ReadCloser) error {
 			return err
 		}
 		record := &api.Record{}
-		if err := proto.Unmarshal(buf.Bytes(), record); err != nil {
+		if err = proto.Unmarshal(buf.Bytes(), record); err != nil {
 			return err
 		}
 		if i == 0 {
-			f.log.Config.Segment.InitialOffset = record.Offset
-			if err := f.log.Reset(); err != nil {
+			l.log.Config.Segment.InitialOffset = record.Offset
+			if err := l.log.Reset(); err != nil {
 				return err
 			}
 		}
-		if _, err = f.log.Append(record); err != nil {
+		if _, err = l.log.Append(record); err != nil {
 			return err
 		}
 		buf.Reset()
@@ -339,7 +352,6 @@ func (l *logStore) GetLog(index uint64, out *raft.Log) error {
 func (l *logStore) StoreLog(record *raft.Log) error {
 	return l.StoreLogs([]*raft.Log{record})
 }
-
 func (l *logStore) StoreLogs(records []*raft.Log) error {
 	for _, record := range records {
 		if _, err := l.Append(&api.Record{
@@ -385,6 +397,7 @@ func (s *StreamLayer) Dial(
 ) (net.Conn, error) {
 	dialer := &net.Dialer{Timeout: timeout}
 	var conn, err = dialer.Dial("tcp", string(addr))
+
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +422,7 @@ func (s *StreamLayer) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	if bytes.Compare([]byte{byte(RaftRPC)}, b) != 0 {
+	if !bytes.Equal([]byte{byte(RaftRPC)}, b) {
 		return nil, fmt.Errorf("not a raft rpc")
 	}
 	if s.serverTLSConfig != nil {

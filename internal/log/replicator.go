@@ -29,6 +29,7 @@ func (r *Replicator) Join(name, addr string) error {
 	if r.closed {
 		return nil
 	}
+
 	if _, ok := r.servers[name]; ok {
 		// already replicating so skip
 		return nil
@@ -41,7 +42,7 @@ func (r *Replicator) Join(name, addr string) error {
 }
 
 func (r *Replicator) replicate(addr string, leave chan struct{}) {
-	cc, err := grpc.NewClient(addr, r.DialOptions...)
+	cc, err := grpc.Dial(addr, r.DialOptions...)
 	if err != nil {
 		r.logError(err, "failed to dial", addr)
 		return
@@ -60,12 +61,13 @@ func (r *Replicator) replicate(addr string, leave chan struct{}) {
 		r.logError(err, "failed to consume", addr)
 		return
 	}
+
 	records := make(chan *api.Record)
 	go func() {
 		for {
 			recv, err := stream.Recv()
 			if err != nil {
-				r.logError(err, "failed to recieve", addr)
+				r.logError(err, "failed to receive", addr)
 				return
 			}
 			records <- recv.Record
@@ -86,6 +88,7 @@ func (r *Replicator) replicate(addr string, leave chan struct{}) {
 			)
 			if err != nil {
 				r.logError(err, "failed to produce", addr)
+				return
 			}
 		}
 	}

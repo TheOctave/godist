@@ -2,7 +2,6 @@ package log_test
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"reflect"
@@ -22,7 +21,7 @@ func TestMultipleNodes(t *testing.T) {
 	ports := dynaport.Get(nodeCount)
 
 	for i := 0; i < nodeCount; i++ {
-		dataDir, err := ioutil.TempDir("", "distributed-log-test")
+		dataDir, err := os.MkdirTemp("", "distributed-log-test")
 		require.NoError(t, err)
 		defer func(dir string) {
 			_ = os.RemoveAll(dir)
@@ -30,7 +29,7 @@ func TestMultipleNodes(t *testing.T) {
 
 		ln, err := net.Listen(
 			"tcp",
-			fmt.Sprintf("127.0.0.1%d", ports[i]),
+			fmt.Sprintf("127.0.0.1:%d", ports[i]),
 		)
 		require.NoError(t, err)
 
@@ -45,6 +44,7 @@ func TestMultipleNodes(t *testing.T) {
 		if i == 0 {
 			config.Raft.Bootstrap = true
 		}
+
 		l, err := log.NewDistributedLog(dataDir, config)
 		require.NoError(t, err)
 
@@ -57,6 +57,7 @@ func TestMultipleNodes(t *testing.T) {
 			err = l.WaitForLeader(3 * time.Second)
 			require.NoError(t, err)
 		}
+
 		logs = append(logs, l)
 	}
 
@@ -67,6 +68,7 @@ func TestMultipleNodes(t *testing.T) {
 	for _, record := range records {
 		off, err := logs[0].Append(record)
 		require.NoError(t, err)
+
 		require.Eventually(t, func() bool {
 			for j := 0; j < nodeCount; j++ {
 				got, err := logs[j].Read(off)
@@ -87,7 +89,9 @@ func TestMultipleNodes(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 
-	off, err := logs[0].Append(&api.Record{Value: []byte("third")})
+	off, err := logs[0].Append(&api.Record{
+		Value: []byte("third"),
+	})
 	require.NoError(t, err)
 
 	time.Sleep(50 * time.Millisecond)
