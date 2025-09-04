@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/TheOctave/godist/api/v1"
+	"github.com/theoctave/godist/api/v1"
 )
 
 type Log struct {

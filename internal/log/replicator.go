@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/TheOctave/godist/api/v1"
+	"github.com/theoctave/godist/api/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 )

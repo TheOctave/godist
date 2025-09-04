@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TheOctave/godist/internal/auth"
-	"github.com/TheOctave/godist/internal/discovery"
-	"github.com/TheOctave/godist/internal/log"
-	"github.com/TheOctave/godist/internal/server"
 	"github.com/hashicorp/raft"
 	"github.com/soheilhy/cmux"
+	"github.com/theoctave/godist/internal/auth"
+	"github.com/theoctave/godist/internal/discovery"
+	"github.com/theoctave/godist/internal/log"
+	"github.com/theoctave/godist/internal/server"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -129,8 +129,9 @@ func (a *Agent) setupServer() error {
 		a.Config.ACLPolicyFile,
 	)
 	serverConfig := &server.Config{
-		CommitLog:  a.log,
-		Authorizer: authorizer,
+		CommitLog:   a.log,
+		Authorizer:  authorizer,
+		GetServerer: a.log,
 	}
 	var opts []grpc.ServerOption
 	if a.Config.ServerTLSConfig != nil {
